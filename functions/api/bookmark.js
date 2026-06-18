@@ -27,18 +27,21 @@ export async function onRequestPatch({ request, env }) {
   catch { return Response.json({ error: 'invalid JSON' }, { status: 400, headers: CORS }); }
 
   const { url, title, tags, newUrl, favicon } = body;
-  if (!url) return Response.json({ error: 'url required' }, { status: 400, headers: CORS });
+  const currentUrl = url?.trim();
+  if (!currentUrl) return Response.json({ error: 'url required' }, { status: 400, headers: CORS });
 
   const bookmarks = await env.DATA.get('bookmarks', 'json').catch(() => null) ?? [];
-  const idx = bookmarks.findIndex(b => b.url === url);
+  const idx = bookmarks.findIndex(b => b.url === currentUrl);
   if (idx === -1) return Response.json({ error: 'not found' }, { status: 404, headers: CORS });
 
   if (title   !== undefined) bookmarks[idx].title   = title;
   if (tags    !== undefined) bookmarks[idx].tags    = tags;
   if (favicon !== undefined) bookmarks[idx].favicon = favicon || faviconUrl(bookmarks[idx].url);
   if (newUrl  !== undefined) {
-    bookmarks[idx].url = newUrl;
-    if (favicon === undefined) bookmarks[idx].favicon = faviconUrl(newUrl);
+    const normalizedNewUrl = newUrl.trim();
+    if (!normalizedNewUrl) return Response.json({ error: 'newUrl must not be empty' }, { status: 400, headers: CORS });
+    bookmarks[idx].url = normalizedNewUrl;
+    if (favicon === undefined) bookmarks[idx].favicon = faviconUrl(normalizedNewUrl);
   }
   await env.DATA.put('bookmarks', JSON.stringify(bookmarks));
   return Response.json({ ok: true }, { headers: CORS });

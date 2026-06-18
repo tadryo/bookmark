@@ -960,7 +960,7 @@ function compressToCanvas(file, { maxDim, size, centerCrop = false, format = 'im
       }
       resolve(canvas.toDataURL(format, quality));
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
     img.src = url;
   });
 }
