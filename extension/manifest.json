@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Save to Bookmark",
+  "version": "1.0",
+  "description": "Save current page to your local bookmark server (localhost:8765)",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["tabs", "activeTab"],
+  "host_permissions": ["http://localhost:8765/*"],
+  "commands": {
+    "save-bookmark": {
+      "suggested_key": {
+        "mac": "Command+Shift+D",
+        "default": "Ctrl+Shift+D"
+      },
+      "description": "Save current page to bookmark"
+    }
+  },
+  "action": {
+    "default_title": "Save current page to bookmark",
+    "icons": {
+      "16": "icons/16.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}
