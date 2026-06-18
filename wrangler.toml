@@ -1,0 +1,7 @@
+name = "bookmark"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "."
+
+[[kv_namespaces]]
+binding = "DATA"
+id = "fe5dfffdc6fd410fbb012dbfba08e8f9"

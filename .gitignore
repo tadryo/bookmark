@@ -1,0 +1,5 @@
+bookmarks.md
+logs/
+*.log
+__pycache__/
+.wrangler/
