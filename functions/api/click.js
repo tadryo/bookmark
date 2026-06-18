@@ -1,8 +1,4 @@
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+import { CORS, options as onRequestOptions } from '../_cors.js';
 
 export async function onRequestPost({ request, env }) {
   let body;
@@ -18,6 +14,4 @@ export async function onRequestPost({ request, env }) {
   return Response.json({ ok: true }, { headers: CORS });
 }
 
-export async function onRequestOptions() {
-  return new Response(null, { headers: CORS });
-}
+export { onRequestOptions };

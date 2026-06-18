@@ -1,8 +1,4 @@
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+import { CORS, options as onRequestOptions } from '../_cors.js';
 
 function faviconUrl(url) {
   try { return `https://icons.duckduckgo.com/ip3/${new URL(url).hostname}.ico`; }
@@ -33,6 +29,4 @@ export async function onRequestDelete({ request, env }) {
   return Response.json({ ok: true }, { headers: CORS });
 }
 
-export async function onRequestOptions() {
-  return new Response(null, { headers: CORS });
-}
+export { onRequestOptions };
