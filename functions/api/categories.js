@@ -1,8 +1,4 @@
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+import { CORS, options as onRequestOptions } from '../_cors.js';
 
 export async function onRequestGet({ env }) {
   const cats = await env.DATA.get('categories', 'json').catch(() => null) ?? [];
@@ -52,6 +48,4 @@ export async function onRequestDelete({ request, env }) {
   return Response.json({ ok: true }, { headers: CORS });
 }
 
-export async function onRequestOptions() {
-  return new Response(null, { headers: CORS });
-}
+export { onRequestOptions };

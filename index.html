@@ -838,6 +838,22 @@
 const API = '';
 const LS = { theme: 'bm-theme', wallpaper: 'bm-wallpaper', view: 'bm-view', cat: 'bm-cat', defaultView: 'bm-default-view' };
 
+async function api(method, path, body, { keepalive = false } = {}) {
+  const opts = { method, keepalive };
+  if (body !== undefined) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
+  }
+  return fetch(`${API}${path}`, opts).catch(() => null);
+}
+
+function makeEmpty(html) {
+  const el = document.createElement('div');
+  el.className = 'empty';
+  el.innerHTML = html;
+  return el;
+}
+
 let allBookmarks = [];
 let allCategories = [];
 let allReading = [];
@@ -925,24 +941,32 @@ const wallpaperPreview = document.getElementById('wallpaperPreview');
 const wallpaperDropText = document.getElementById('wallpaperDropText');
 let pendingWallpaper = null;
 
-function compressImage(file) {
+function compressToCanvas(file, { maxDim, size, centerCrop = false, format = 'image/jpeg', quality = 0.85 } = {}) {
   return new Promise(resolve => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const maxDim = 1920;
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
       const canvas = document.createElement('canvas');
-      canvas.width  = Math.round(img.width  * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', 0.85));
+      if (centerCrop) {
+        canvas.width = canvas.height = size;
+        const s = Math.min(img.width, img.height);
+        canvas.getContext('2d').drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, 0, 0, size, size);
+      } else {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      }
+      resolve(canvas.toDataURL(format, quality));
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
     img.src = url;
   });
 }
+
+function compressImage(file)   { return compressToCanvas(file, { maxDim: 1920 }); }
+function compressFavicon(file) { return compressToCanvas(file, { size: 64, centerCrop: true, format: 'image/png' }); }
 
 function showWallpaperPreview(dataUrl) {
   if (dataUrl) {
@@ -1022,11 +1046,11 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 // ── Data ──────────────────────────────────────
 async function loadAll() {
   const [bRes, cRes, meRes, catRes, rRes] = await Promise.all([
-    fetch(`${API}/api/bookmarks`).catch(() => null),
-    fetch(`${API}/api/clicks`).catch(() => null),
-    fetch(`${API}/api/me`).catch(() => null),
-    fetch(`${API}/api/categories`).catch(() => null),
-    fetch(`${API}/api/reading`).catch(() => null),
+    api('GET', '/api/bookmarks'),
+    api('GET', '/api/clicks'),
+    api('GET', '/api/me'),
+    api('GET', '/api/categories'),
+    api('GET', '/api/reading'),
   ]);
   allBookmarks  = bRes?.ok   ? await bRes.json()   : [];
   clicks        = cRes?.ok   ? await cRes.json()   : {};
@@ -1055,11 +1079,7 @@ function makeCard(bm) {
   del.addEventListener('click', async e => {
     e.stopPropagation();
     if (!confirm(`「${bm.title}」を削除しますか？`)) return;
-    const res = await fetch(`${API}/api/bookmark`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: bm.url }),
-    }).catch(() => null);
+    const res = await api('DELETE', '/api/bookmark', { url: bm.url });
     if (res?.ok) {
       allBookmarks = allBookmarks.filter(b => b.url !== bm.url);
       renderGrid();
@@ -1100,13 +1120,9 @@ function makeCard(bm) {
   }
 
   card.addEventListener('click', () => {
-    fetch(`${API}/api/click`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: bm.url }),
-    }).catch(() => {});
     clicks[bm.url] = (clicks[bm.url] || 0) + 1;
-    location.href = bm.url;
+    api('POST', '/api/click', { url: bm.url }, { keepalive: true });
+    window.open(bm.url, '_blank', 'noopener,noreferrer');
     renderGrid();
   });
 
@@ -1169,7 +1185,7 @@ function renderGrid() {
     grid.className = 'grid';
     const list = [...allBookmarks].sort((a, b) => (clicks[b.url] || 0) - (clicks[a.url] || 0));
     if (!list.length) {
-      grid.innerHTML = '<div class="empty">ブックマークがありません。<br><b>n</b> キーまたは ＋ で追加できます。</div>';
+      grid.appendChild(makeEmpty('ブックマークがありません。<br><b>n</b> キーまたは ＋ で追加できます。'));
     } else {
       list.forEach(bm => grid.appendChild(makeCard(bm)));
     }
@@ -1207,7 +1223,7 @@ function renderSearchResults(container) {
 // ── Reading list ──────────────────────────────
 function renderReadingList(container) {
   if (!allReading.length) {
-    container.innerHTML = '<div class="empty">後で読むリストが空です。<br><b>n</b> キーまたは ＋ で追加できます。</div>';
+    container.appendChild(makeEmpty('後で読むリストが空です。<br><b>n</b> キーまたは ＋ で追加できます。'));
     return;
   }
   const list = document.createElement('div');
@@ -1238,11 +1254,7 @@ function renderReadingList(container) {
     doneBtn.textContent = '✓ 読んだ';
     doneBtn.addEventListener('click', async e => {
       e.stopPropagation();
-      await fetch(`${API}/api/reading`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: item.url }),
-      }).catch(() => {});
+      await api('DELETE', '/api/reading', { url: item.url });
       allReading = allReading.filter(r => r.url !== item.url);
       renderGrid();
     });
@@ -1259,7 +1271,7 @@ function renderReadingList(container) {
 function renderFinderLayout(container) {
   const cats = getCategories();
   if (!cats.length) {
-    container.innerHTML = '<div class="empty" style="padding:60px 0;text-align:center;color:var(--muted)">ブックマークがありません。</div>';
+    container.appendChild(makeEmpty('ブックマークがありません。'));
     return;
   }
 
@@ -1287,11 +1299,7 @@ function renderFinderLayout(container) {
   async function moveBookmark(url, newCat) {
     const bm = allBookmarks.find(b => b.url === url);
     if (!bm || (bm.tags[0] || '未分類') === newCat) return;
-    await fetch(`${API}/api/bookmark`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, tags: [newCat] }),
-    }).catch(() => {});
+    await api('PATCH', '/api/bookmark', { url, tags: [newCat] });
     bm.tags = [newCat];
     renderGrid();
   }
@@ -1367,11 +1375,7 @@ function renderFinderLayout(container) {
         const newName = input.value.trim();
         cancel();
         if (!newName || newName === cat) return;
-        await fetch(`${API}/api/categories`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ oldName: cat, newName }),
-        }).catch(() => {});
+        await api('PATCH', '/api/categories', { oldName: cat, newName });
         const ci = allCategories.indexOf(cat);
         if (ci !== -1) allCategories[ci] = newName;
         allBookmarks.forEach(bm => { if (bm.tags[0] === cat) bm.tags[0] = newName; });
@@ -1400,11 +1404,7 @@ function renderFinderLayout(container) {
         ? `「${cat}」を削除しますか？\n（${count}件のブックマークは未分類に移動されます）`
         : `「${cat}」を削除しますか？`;
       if (!confirm(msg)) return;
-      await fetch(`${API}/api/categories`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: cat }),
-      }).catch(() => {});
+      await api('DELETE', '/api/categories', { name: cat });
       allCategories = allCategories.filter(c => c !== cat);
       allBookmarks.forEach(bm => { if (bm.tags[0] === cat) bm.tags = []; });
       if (selectedCat === cat) { selectedCat = null; localStorage.removeItem(LS.cat); }
@@ -1444,11 +1444,7 @@ function renderFinderLayout(container) {
     addInput.value = '';
     addInput.style.display = 'none';
     if (!name) return;
-    await fetch(`${API}/api/categories`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    }).catch(() => {});
+    await api('POST', '/api/categories', { name });
     if (!allCategories.includes(name)) allCategories.push(name);
     selectedCat = name;
     localStorage.setItem(LS.cat, name);
@@ -1496,28 +1492,6 @@ document.querySelectorAll('header .view-btn').forEach(btn => {
   });
 });
 
-// ── Favicon compression ───────────────────────
-function compressFavicon(file) {
-  return new Promise(resolve => {
-    const img = new Image();
-    const blobUrl = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(blobUrl);
-      const size = 64;
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = size;
-      const s = Math.min(img.width, img.height);
-      canvas.getContext('2d').drawImage(
-        img,
-        (img.width - s) / 2, (img.height - s) / 2, s, s,
-        0, 0, size, size
-      );
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = () => resolve(null);
-    img.src = blobUrl;
-  });
-}
 
 // ── Add / Edit modal ──────────────────────────
 const addOverlay  = document.getElementById('addOverlay');
@@ -1624,11 +1598,7 @@ document.getElementById('addSubmitBtn').addEventListener('click', async () => {
     const body = { url: editingBookmark.url, title: t, tags };
     if (u !== editingBookmark.url) body.newUrl = u;
     if (pendingFavicon !== undefined) body.favicon = pendingFavicon;
-    res = await fetch(`${API}/api/bookmark`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }).catch(() => null);
+    res = await api('PATCH', '/api/bookmark', body);
     if (res?.ok) {
       const bm = allBookmarks.find(b => b.url === editingBookmark.url);
       if (bm) {
@@ -1638,19 +1608,11 @@ document.getElementById('addSubmitBtn').addEventListener('click', async () => {
       }
     }
   } else if (saveTarget === 'reading') {
-    res = await fetch(`${API}/api/reading`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: t, url: u }),
-    }).catch(() => null);
+    res = await api('POST', '/api/reading', { title: t, url: u });
     if (res?.ok) allReading.unshift({ title: t, url: u, favicon: '', addedAt: Date.now() });
   } else {
     const tags = selectedAddTag ? [selectedAddTag] : [];
-    res = await fetch(`${API}/api/bookmark`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: t, url: u, tags }),
-    }).catch(() => null);
+    res = await api('POST', '/api/bookmark', { title: t, url: u, tags });
   }
 
   if (res?.ok) {
